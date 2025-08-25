@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{types::{Number, Symbols, TreeTokens}, util::as_i128};
+use crate::{types::{Number, Symbols, TreeTokens, TreeType}, util::as_i128};
 
 
 
@@ -44,37 +44,6 @@ macro_rules! add_fix {
 
 
 
-#[derive(Debug,Clone)]
-pub enum TreeType{
-    //leafs
-    Variable(String),
-    Number(Number),
-    //branches
-    Plus(Box<TreeType>,Box<TreeType>),
-    Min(Box<TreeType>,Box<TreeType>),
-    Mul(Box<TreeType>,Box<TreeType>),
-    Sub(Box<TreeType>,Box<TreeType>),
-    Exponent(Box<TreeType>,Box<TreeType>),
-    Brac(Box<TreeType>),
-}
-impl TreeType{
-    fn try_leaf(a:&str) -> TreeType{
-        
-        if let Ok(i) = as_i128(a){
-            return TreeType::Number(Number::Number(i));
-        }
-        // float check lazım
-        else if let Ok(f) = a.parse::<f64>(){
-            return TreeType::Number(Number::Float(f));
-        }
-
-        else {
-            return TreeType::Variable(a.to_string());
-        }
-
-    
-    }
-}
 
 
 #[derive(Debug)]
@@ -90,6 +59,7 @@ pub struct Tree{
     pub variables : HashMap<String,Number>,
 }
 
+// parsing and printing
 impl Tree {
 
     pub fn new() -> Self{
@@ -106,8 +76,7 @@ impl Tree {
         
         let symbols = ["+","-","*","/","**","//",","];
         
-        let chars:Vec<String> = split_str(&str, &symbols,&[","]);
-        println!("{:?}",chars);
+        let chars:Vec<String> = split_str(&str, &symbols,&[",",""]);
         for x in symbols{
             if x == chars[0]{
                 return Ok(FixType::PreFıx) ;
@@ -134,7 +103,7 @@ impl Tree {
     pub fn parse_auto(&mut self,str:String) -> Result<(),()> {
         let tip = Self::check_fix_type(&str);
         if let Ok(tip)=tip{
-            Self::parse_str(str, tip);
+            Self::parse_str(self,str, tip)?;
         }else {
            return Err(()) 
         };
@@ -146,34 +115,163 @@ impl Tree {
     /// 1+23+4242(a+b)
     /// 
     /// +23+54,23
-    pub fn parse_str(str:String,fixtype:FixType){
-        let symbols = ["+","-","*","/","**","//",","];
+    pub fn parse_str(&mut self,str:String,fixtype:FixType) -> Result<(),()>{
+        let symbols = ["+","-","*","/","**","//",",","(",")"];
         let chars:Vec<String> = split_str(&str, &symbols,&[","]);
+        println!("{:?}",chars);
         let tokens = Self::tokenize(chars);
-
-        match fixtype {
-            FixType::Infıx => Self::parse_infix(tokens),
-            FixType::PostFıx => Self::parse_postfix(tokens),
-            FixType::PreFıx => {Self::parse_prefix(&tokens,0);},
+        //println!("{:?}",tokens);
+        let a = match fixtype {
+            FixType::Infıx => Self::parse_infix(&tokens,0),
+            FixType::PostFıx => Self::parse_postfix(&tokens,tokens.len()-1),
+            FixType::PreFıx => Self::parse_prefix(&tokens,0),
         };
+        if let Ok(a) = a {
+            self.inner= Some(Box::new(a));
+            Ok(())
+        }else {
+            Err(())
+        }
+    }
+
+    fn maketree(symbol:Symbols,left:Box<TreeType>,right:Box<TreeType>) -> TreeType{
+        match symbol {
+            Symbols::Plus => TreeType::Plus(left, right),
+            Symbols::Min =>  TreeType::Min(left, right),
+            Symbols::Mul =>  TreeType::Mul(left, right),
+            Symbols::Sub =>  TreeType::Sub(left, right),
+            Symbols::Exp =>  TreeType::Exponent(left, right),
+            Symbols::Brac => todo!(),
+        }
     }
 
     fn parse_prefix(tokens:&Vec<TreeTokens>,start_from:usize) ->Result<TreeType,()>{
-        if let Ok(symbol) =  Symbols::try_from(tokens[start_from].clone()) {
+        let tok =  tokens.get(start_from).ok_or_else(||())?;
+        dbg!(&tok);
+        match tok {
+            TreeTokens::BracC => {
+                return Self::parse_infix(tokens, start_from+1);
+            },
+            _=>()
+        };
+
+        if let Ok(symbol) =  Symbols::try_from(tok.clone()) {
             
             match symbol {
+                Symbols::Mul |
+                Symbols::Sub |
+                Symbols::Exp |
+                Symbols::Plus |
                 Symbols::Min => {
-                    let left = TreeType::try_leaf(tokens[start_from+1]);
-
+                    let left = TreeType::try_leaf(&tokens[start_from+1]);
+                    let left = if let Ok(l) = left{
+                            l
+                    }else{
+                        match Self::parse_prefix(tokens, start_from+1){
+                            Ok(o) => o,
+                            Err(_) => return Err(()),
+                        }
+                    };
                     
+                    
+                    let right = TreeType::try_leaf(&tokens[start_from+2]);
+                    let right = if let Ok(l) = right{
+                            l
+                    }else{
+                        match Self::parse_prefix(tokens, start_from+2){
+                            Ok(o) => o,
+                            Err(_) => return Err(()),
+                        }
+                    };
+                    let t = Self::maketree(symbol,Box::new(left), Box::new(right));
+                    return Ok(t);                    
 
                     
                 },
-                Symbols::Mul => {},
-                Symbols::Sub => {},
-                Symbols::Exp => {},
-                Symbols::Plus => {},
-                Symbols::Brac => {}, 
+                Symbols::Brac => {
+                    let inner = Self::parse_prefix(tokens, start_from+1)?;
+                    let t = TreeType::Brac(Box::new(inner));
+                    return  Ok(t);
+                }, 
+            };
+        }else {
+            match &tok {
+                TreeTokens::Number(a) => {
+                    let leaf = TreeType::Number(a.clone());
+                    return Ok(leaf);
+                },
+                TreeTokens::Variable(v) => {
+                    let leaf = TreeType::Variable(v.clone());
+                    return Ok(leaf);
+
+                },
+                _=> return Err(())
+            }
+        }
+        
+        
+    }
+    fn parse_postfix(tokens:&Vec<TreeTokens>,start_from:usize)->Result<TreeType,()>{
+            if let Ok(symbol) =  Symbols::try_from(tokens[start_from].clone()) {
+            
+            match symbol {
+                Symbols::Mul |
+                Symbols::Sub |
+                Symbols::Exp |
+                Symbols::Plus |
+                Symbols::Min => {
+                    let left = TreeType::try_leaf(&tokens[start_from-1]);
+                    let left = if let Ok(l) = left{
+                            l
+                    }else{
+                        match Self::parse_postfix(tokens, start_from-1){
+                            Ok(o) => o,
+                            Err(_) => return Err(()),
+                        }
+                    };
+                    
+                    
+                    let right = TreeType::try_leaf(&tokens[start_from-2]);
+                    let right = if let Ok(l) = right{
+                            l
+                    }else{
+                        match Self::parse_postfix(tokens, start_from-2){
+                            Ok(o) => o,
+                            Err(_) => return Err(()),
+                        }
+                    };
+                    let t = Self::maketree(symbol,Box::new(left), Box::new(right));
+                    return Ok(t);                    
+
+                    
+                },
+                Symbols::Brac => {
+                    let mut opens = 0;
+                    let mut ctr = start_from -1;
+                    loop {
+                        let next = &tokens[ctr];
+                        dbg!(&next);
+                        match next {
+                            TreeTokens::BracO => opens +=1,
+                            TreeTokens::BracC => {
+                                if opens == 0{
+                                    if let Ok(t) = Self::parse_postfix(tokens, ctr+1){
+                                        let brac = TreeType::Brac(Box::new(t));
+                                        return Ok(brac);
+                                    }
+
+                                }else {
+                                    opens -= 1;
+                                }
+                            },
+                            _=> (),
+                        };
+                        ctr -=1;
+                        if ctr >= tokens.len(){
+                            return Err(());
+                        }
+                    }
+                }, 
             };
         }else {
             match &tokens[0] {
@@ -195,14 +293,108 @@ impl Tree {
         
 
 
+    }
+    fn parse_infix(tokens:&Vec<TreeTokens>,ctr:usize) -> Result<TreeType,()>{
+        let tok =  tokens.get(ctr).ok_or_else(||())?;
+        match tok {
+            TreeTokens::BracC => {
+                return Self::parse_infix(tokens, ctr+1);
+            },
+            _=>()
+        };
+        if let Ok(left) = TreeType::try_leaf(tok) && let Ok(symbol) =Symbols::try_from( tokens.get(ctr+1).ok_or_else(||())?.clone()){
+            // sol ve sağ yaprak ise
+            
+            let right = {
+                if let Ok(right) = TreeType::try_leaf(&tokens[ctr+2]){
+                    right
+                }else if let Ok(right) = Self::parse_infix(tokens, ctr+2) {
+                    right
+                }
+                else {
+                    return Err(());
+                }
+            };
+
+            match symbol {
+                Symbols::Plus |
+                Symbols::Min |
+                Symbols::Mul |
+                Symbols::Sub |
+                Symbols::Exp => {
+                    
+                    return Ok(Self::maketree(symbol, Box::new(left), Box::new(right)));
+                },
+                Symbols::Brac => {
+                    let inner = Self::parse_infix(tokens, ctr+2)?;
+                    return Ok(TreeType::Brac(Box::new(inner)));
+                },
+            }
+
+        }
+        // eğer sol yaprak değilse
+        else {
+            if let Ok(left) = Self::parse_infix(tokens, ctr+1) && let Ok(symbol) =Symbols::try_from( tokens[ctr+2].clone()){
+                let right = {
+                    if let Ok(right) = TreeType::try_leaf(&tokens[ctr+2]){
+                        right
+                    }else if let Ok(right) = Self::parse_infix(tokens, ctr+2) {
+                        right
+                    }
+                    else {
+                        return Err(());
+                    }
+                };
+
+                match symbol {
+                    Symbols::Plus |
+                    Symbols::Min |
+                    Symbols::Mul |
+                    Symbols::Sub |
+                    Symbols::Exp => {
+                        return Ok(Self::maketree(symbol, Box::new(left), Box::new(right)));
+                    },
+                    Symbols::Brac => {
+                        
+                        let mut opens = 0;
+                        let mut ctri = ctr +3;
+                        loop {
+                            let next = &tokens[ctri];
+                            dbg!(&next);
+
+                            match next {
+                                TreeTokens::BracO => opens +=1,
+                                TreeTokens::BracC => {
+                                    if opens == 0{
+                                        if let Ok(t) = Self::parse_infix(tokens, ctri){
+                                            let brac = TreeType::Brac(Box::new(t));
+                                            return Ok(brac);
+                                        }
+
+                                    }else {
+                                        opens -= 1;
+                                    }
+                                },
+                                _=> (),
+                            };
+                            ctri +=1;
+                            if ctri >= tokens.len(){
+                                return Err(());
+                            }
+                        }
+
+                    },
+                }
+
+
+
+            }
+        }
+
         todo!()
     }
-    fn parse_postfix(tokens:Vec<TreeTokens>){
-        
-    }
-    fn parse_infix(tokens:Vec<TreeTokens>){
-
-    }
+    
+    
     fn tokenize(str:Vec<String>) -> Vec<TreeTokens>{
         let mut tokens:Vec<TreeTokens> = Vec::new();
         for x in str{
@@ -345,8 +537,67 @@ impl Tree {
         return str;
     }
 
+
 }
 
+// aritmetics
+impl Tree {
+    pub fn simplify(&mut self){
+
+    }
+
+    fn inner_simplify(tree:Box<TreeType>) -> Result<Number,Box<TreeType>>{
+        match *tree {
+            TreeType::Variable(_) => return Err(tree),
+            TreeType::Number(number) => return Ok(number),
+            TreeType::Plus(tree_type, tree_type1) =>{
+                let l = Self::inner_simplify(tree_type);
+                let r = Self::inner_simplify(tree_type1);
+                if let (Ok(l),Ok(r)) = (l,r){
+                    return Ok(Number::add(&l, &r));
+                }
+
+            }
+            TreeType::Min(tree_type, tree_type1) =>{
+                let l = Self::inner_simplify(tree_type);
+                let r = Self::inner_simplify(tree_type1);
+                if let (Ok(l),Ok(r)) = (l,r){
+                    return Ok(Number::sub(&l, &r));
+                }
+
+            }
+            TreeType::Mul(tree_type, tree_type1) =>{
+                let l = Self::inner_simplify(tree_type);
+                let r = Self::inner_simplify(tree_type1);
+                if let (Ok(l),Ok(r)) = (l,r){
+                    todo!();
+                }
+
+            }
+            TreeType::Sub(tree_type, tree_type1) =>{
+                let l = Self::inner_simplify(tree_type);
+                let r = Self::inner_simplify(tree_type1);
+                if let (Ok(l),Ok(r)) = (l,r){
+                    todo!();
+                }
+
+            }
+            TreeType::Exponent(tree_type, tree_type1) => {
+                let l = Self::inner_simplify(tree_type);
+                let r = Self::inner_simplify(tree_type1);
+                if let (Ok(l),Ok(r)) = (l,r){
+                    todo!();
+                }
+            },
+            
+            TreeType::Brac(tree_type) => {
+                return Self::inner_simplify(tree_type);
+            },
+        };
+
+        todo!()
+    }
+}
 
 
 
@@ -368,7 +619,11 @@ pub fn split_str(str:&String,split_symbols:&[&str],discard_symbols:&[&str]) -> V
 
     'main:loop {
         if ctr >= chars.len(){
-            tokens.push(now);
+            if now.is_empty(){
+
+            }else {   
+                tokens.push(now);
+            }
             break 'main;
         }
         let c = chars[ctr];
@@ -399,12 +654,14 @@ pub fn split_str(str:&String,split_symbols:&[&str],discard_symbols:&[&str]) -> V
                         if size == max_symbol_size{
                             // burada break at lo
                             // ve eklenen bişeye benziyosa
-                            if !tutan.is_empty(){
+                            if !tutan.is_empty() && !discard_symbols.contains(&tutan.as_str()){
                                 ctr += tutan.len();
+
                                 tokens.push(tutan);
                                 continue 'main;
                             }
                             ctr += 1;
+
                             tokens.push(c.to_string());
                             continue 'main;
                         }
@@ -431,12 +688,11 @@ pub fn split_str(str:&String,split_symbols:&[&str],discard_symbols:&[&str]) -> V
         }
         now.push_str(c);
         
-
-
+        
         ctr += 1;
-
+        
     }
-    
+
     return tokens;
     
     
@@ -454,10 +710,9 @@ pub mod test{
     #[test]
     fn split_test(){
         let str = "a+v+34-ht-adfa*/*+j";
-        let expected = vec!["a", "+", "v", "+", "34", "-", "ht", "-", "adfa", "*/*+", "j"];
+        let expected = vec!["a", "+", "v", "+", "34", "-", "ht", "-", "adfa", "*/*","+", "j"];
         let expected: Vec<String> = expected.iter().map(|s| s.to_string()).collect();
-
-        let res = split_str(&str.to_string(), &["+","-","*","/","*/*+"],&[]);
+        let res = split_str(&str.to_string(), &["+","-","*","/","*/*"],&[]);
         assert_eq!(expected,res);
     }
 }
