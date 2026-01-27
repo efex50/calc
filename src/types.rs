@@ -160,3 +160,75 @@ impl TreeType{
     
     }
 }
+
+#[derive(Debug)]
+pub enum Thing{
+    Variable(String),
+    Number(Number),
+
+}
+
+#[derive(Debug)]
+pub enum InfixTree{
+    //leafs
+    Thing(Thing),
+    //branches
+    Op{
+        sym:Symbols,
+        left:Box<InfixTree>,
+        right:Box<InfixTree>
+    },
+    // op half
+    Oph{
+        sym:Symbols,
+        left:Box<InfixTree>
+    },
+}
+/*impl InfixTree {
+
+    pub fn to_symbol(&self) -> Option<Symbols>{
+        match self {
+            InfixTree::Variable(_) => None,
+            InfixTree::Number(_number) => None,
+            InfixTree::Plus(_infix_tree) => {Some(Symbols::Plus)},
+            InfixTree::Min(_infix_tree) => {Some(Symbols::Min)},
+            InfixTree::Mul(_infix_tree) => {Some(Symbols::Mul)},
+            InfixTree::Sub(_infix_tree) => {Some(Symbols::Sub)},
+            InfixTree::Exponent(_infix_tree) => {Some(Symbols::Exp)},
+            InfixTree::Brac(_tree_type) => {Some(Symbols::Brac)},
+        }
+    }
+    
+    pub fn merge(&mut self,other:Self){
+        match self {
+            InfixTree::Variable(_) => todo!(),
+            InfixTree::Number(number) => todo!(),
+            InfixTree::Plus(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+            InfixTree::Min(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+            InfixTree::Mul(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+            InfixTree::Sub(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+            InfixTree::Exponent(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+            InfixTree::Brac(infix_tree) => {
+                let t = InfixTree::Plus(Box::new(other));
+                *self = t;
+            },
+        }
+    }
+}
+
+*/
