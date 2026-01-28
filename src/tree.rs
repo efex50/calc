@@ -97,7 +97,6 @@ impl Tree {
     pub fn parse_str(&mut self,str:String,fixtype:FixType) -> Result<(),()>{
         let symbols = ["+","-","*","/",",","(",")"];
         let chars:Vec<String> = split_str(&str, &symbols,&[',',' ']);
-        println!("{:?}",chars);
         let tokens = Self::tokenize(chars);
 
         let a = match fixtype {

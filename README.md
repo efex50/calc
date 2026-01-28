@@ -1,1 +1,1 @@
-calc - a mathematical expression evaluater - parser - simplifier fro efescript
+calc - a mathematical expression evaluater - parser - simplifier library and client for efescript
