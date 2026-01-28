@@ -52,11 +52,11 @@ impl Tree {
     pub fn new() -> Self{
         Self { inner: None, variables: HashMap::new() }
     }
-    pub fn set_var(&mut self,name:String,val:Number) -> Option<Number> {
-        self.variables.insert(name, val)
+    pub fn set_var(&mut self,name:impl Into<String>,val:impl Into<Number>) -> Option<Number> {
+        self.variables.insert(name.into(), val.into())
     }
-    pub fn unset_var(&mut self,name:String) -> Option<Number> {
-        self.variables.remove(&name)
+    pub fn unset_var(&mut self,name:impl Into<String>) -> Option<Number> {
+        self.variables.remove(&name.into())
     }
 
     fn check_fix_type(str:&String)-> Result<FixType,()>{
@@ -403,10 +403,11 @@ impl Tree {
     fn inner_simplify(tree: Box<TreeType>,vars: &HashMap<String, Number>) -> Result<Number, Box<TreeType>> {
         match *tree {
             TreeType::Variable(name) => {
+                println!("variable ulaşıldı!!! {:?}",vars.get(&name));
                 if let Some(val) = vars.get(&name) {
-                    Ok(*val) // Değeri varsa sayı olarak döndür (Yerine koyma işlemi)
+                    Ok(*val) 
                 } else {
-                    Err(Box::new(TreeType::Variable(name))) // Yoksa değişken olarak kalsın
+                    Err(Box::new(TreeType::Variable(name)))
                 }
             },
             TreeType::Number(number) => Ok(number),

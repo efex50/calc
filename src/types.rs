@@ -37,6 +37,20 @@ impl Add for Number {
         }
     }
 }
+
+impl From<i128> for Number {
+    fn from(value: i128) -> Self {
+        Self::Number(value)
+    }
+}
+
+
+impl From<f64> for Number {
+    fn from(value: f64) -> Self {
+        Self::Float(value)
+    }
+}
+
 impl Sub for Number {
     type Output = Number;
 
