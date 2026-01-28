@@ -20,6 +20,7 @@ fn main() {
     Tree::parse_auto(&mut t, str.to_owned()).unwrap();
     t.set_var("ad", 0);
     t.simplify();
+    println!("is number? {:?}",t.is_number());
     // Tree::parse_auto(&mut t,"(31+53)+3".to_string()).unwrap();
     //let a = tree::split_str(&"a+v+34-ht-adfa*/*+j".to_string(), &["+","-","*","/","*/*+"],&[]);
     //println!("{}",t.prefixprint().unwrap());

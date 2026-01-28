@@ -400,10 +400,28 @@ impl Tree {
         }
     }
 
+    pub fn is_number(&self) -> Option<Number>{
+        if let Some(tree) = &self.inner{
+
+            match &**tree {
+                TreeType::Variable(var) => {
+                    if let Some(var) = self.variables.get(var){
+                        return Some(var.clone());
+                    };
+                },
+                TreeType::Number(a) => {
+                    return Some(*a);
+                },
+                _ => return None,
+            };
+        };
+
+        None
+    }
+
     fn inner_simplify(tree: Box<TreeType>,vars: &HashMap<String, Number>) -> Result<Number, Box<TreeType>> {
         match *tree {
             TreeType::Variable(name) => {
-                println!("variable ulaşıldı!!! {:?}",vars.get(&name));
                 if let Some(val) = vars.get(&name) {
                     Ok(*val) 
                 } else {
