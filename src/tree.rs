@@ -55,6 +55,9 @@ impl Tree {
     pub fn set_var(&mut self,name:String,val:Number) -> Option<Number> {
         self.variables.insert(name, val)
     }
+    pub fn unset_var(&mut self,name:String) -> Option<Number> {
+        self.variables.remove(&name)
+    }
 
     fn check_fix_type(str:&String)-> Result<FixType,()>{
         if str.is_empty(){
@@ -385,25 +388,33 @@ impl Tree {
     }
 }
 
+// simplifying
 impl Tree {
+
     pub fn simplify(&mut self) {
         if let Some(tree) = self.inner.take() {
-            match Self::inner_simplify(tree) {
+            match Self::inner_simplify(tree, &self.variables) {
                 Ok(number) => self.inner = Some(Box::new(TreeType::Number(number))),
                 Err(node) => self.inner = Some(node),
             }
         }
     }
 
-    fn inner_simplify(tree: Box<TreeType>) -> Result<Number, Box<TreeType>> {
+    fn inner_simplify(tree: Box<TreeType>,vars: &HashMap<String, Number>) -> Result<Number, Box<TreeType>> {
         match *tree {
-            TreeType::Variable(_) => Err(tree),
+            TreeType::Variable(name) => {
+                if let Some(val) = vars.get(&name) {
+                    Ok(*val) // Değeri varsa sayı olarak döndür (Yerine koyma işlemi)
+                } else {
+                    Err(Box::new(TreeType::Variable(name))) // Yoksa değişken olarak kalsın
+                }
+            },
             TreeType::Number(number) => Ok(number),
-            TreeType::Brac(inner) => Self::inner_simplify(inner),
+            TreeType::Brac(inner) => Self::inner_simplify(inner,vars),
             
             TreeType::Plus(left, right) => {
-                let l = Self::inner_simplify(left);
-                let r = Self::inner_simplify(right);
+                let l = Self::inner_simplify(left,vars);
+                let r = Self::inner_simplify(right,vars);
                 
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 + n2),
@@ -417,8 +428,8 @@ impl Tree {
             },
             
             TreeType::Sub(left, right) => { 
-                let l = Self::inner_simplify(left);
-                let r = Self::inner_simplify(right);
+                let l = Self::inner_simplify(left,vars);
+                let r = Self::inner_simplify(right,vars);
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 - n2),
                     (l_res, r_res) => Err(Box::new(TreeType::Sub(Self::result_to_node(l_res), Self::result_to_node(r_res)))),
@@ -426,8 +437,8 @@ impl Tree {
             },
             
             TreeType::Mul(left, right) => { 
-                let l = Self::inner_simplify(left);
-                let r = Self::inner_simplify(right);
+                let l = Self::inner_simplify(left,vars);
+                let r = Self::inner_simplify(right,vars);
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 * n2),
                     (l_res, r_res) => Err(Box::new(TreeType::Mul(Self::result_to_node(l_res), Self::result_to_node(r_res)))),
@@ -435,8 +446,8 @@ impl Tree {
             },
             
             TreeType::Div(left, right) => { 
-                let l = Self::inner_simplify(left);
-                let r = Self::inner_simplify(right);
+                let l = Self::inner_simplify(left,vars);
+                let r = Self::inner_simplify(right,vars);
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 / n2),
                     (l_res, r_res) => Err(Box::new(TreeType::Div(Self::result_to_node(l_res), Self::result_to_node(r_res)))),
