@@ -1,6 +1,3 @@
-
-
-
 pub fn as_i128<S:Into<String>>(a:S) -> Result<i128,()>{
     let a:String = a.into();
     let num :Result<i128, std::num::ParseIntError>;

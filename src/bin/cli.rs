@@ -82,12 +82,14 @@ fn main() {
     } else {
         for print_type in &args.print {
             match print_type {
-                PrintType::Infix => println!("Infix: {}", tree.infixprint().unwrap_or("Hata".into())),
-                PrintType::Prefix => println!("Prefix: {}", tree.prefixprint().unwrap_or("Hata".into())),
-                PrintType::Postfix => println!("Postfix: {}", tree.postfixprint().unwrap_or("Hata".into())),
+                PrintType::Infix => println!("{}", tree.infixprint().unwrap_or("Hata".into())),
+                PrintType::Prefix => println!("{}", tree.prefixprint().unwrap_or("Hata".into())),
+                PrintType::Postfix => println!("{}", tree.postfixprint().unwrap_or("Hata".into())),
                 PrintType::Debug => println!("{:#?}", tree),
             }
         }
+        std::process::exit(1);
+        
     }
 
     if args.simplify && !args.print.is_empty() {

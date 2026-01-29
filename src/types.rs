@@ -59,7 +59,9 @@ impl Sub for Number {
             (Number::Float(a), Number::Float(b)) => {
                 return Number::Float(a-b);
             },
-            (Number::Float(b), Number::Number(a)) |
+            (Number::Float(a), Number::Number(b)) => {
+                return Number::Float(a - b as f64);
+            },
             (Number::Number(a), Number::Float(b)) => {
                 return Number::Float(a as f64-b);
             },
@@ -77,7 +79,9 @@ impl Mul for Number {
             (Number::Float(a), Number::Float(b)) => {
                 return Number::Float(a*b);
             },
-            (Number::Float(b), Number::Number(a)) |
+            (Number::Float(a), Number::Number(b)) => {
+                return Number::Float(a * b as f64);
+            },
             (Number::Number(a), Number::Float(b)) => {
                 return Number::Float(a as f64*b);
             },
@@ -96,7 +100,9 @@ impl Div for Number {
             (Number::Float(a), Number::Float(b)) => {
                 return Number::Float(a/b);
             },
-            (Number::Float(b), Number::Number(a)) |
+            (Number::Float(a), Number::Number(b)) => {
+                return Number::Float(a / b as f64);
+            },
             (Number::Number(a), Number::Float(b)) => {
                 return Number::Float(a as f64/b);
             },

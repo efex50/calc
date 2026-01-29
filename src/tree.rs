@@ -52,7 +52,7 @@ impl Tree {
     pub fn new() -> Self{
         Self { inner: None, variables: HashMap::new() }
     }
-    pub fn set_var(&mut self,name:impl Into<String>,val:impl Into<Number>) -> Option<Number> {
+    pub fn set_var<T: Into<Number>>(&mut self, name: impl Into<String>, val: T) -> Option<Number> {
         self.variables.insert(name.into(), val.into())
     }
     pub fn unset_var(&mut self,name:impl Into<String>) -> Option<Number> {
@@ -117,7 +117,7 @@ impl Tree {
             Symbols::Plus => TreeType::Plus(left, right),
             Symbols::Sub =>  TreeType::Sub(left, right),
             Symbols::Mul =>  TreeType::Mul(left, right),
-            Symbols::Div =>  TreeType::Div(left, right), // Düzeltme: Div -> Div
+            Symbols::Div =>  TreeType::Div(left, right), 
             Symbols::Brac => todo!(),
         }
     }
@@ -349,14 +349,14 @@ impl Tree {
                         add_fix!(post fixtype str '+');
                     },
             TreeType::Div(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '-');
+                        add_fix!(pre fixtype str '/');
                         let l = Self::print_inner(&*tree_type,fixtype);
                         let r = Self::print_inner(&*tree_type1,fixtype);
                         str.push_str(&l);
-                        add_fix!(infix fixtype str '-');
+                        add_fix!(infix fixtype str '/');
                         add_fix!(prepo fixtype str ',');
                         str.push_str(&r);
-                        add_fix!(post fixtype str '-');
+                        add_fix!(post fixtype str '/');
                     },
             TreeType::Mul(tree_type, tree_type1) => {
                         add_fix!(pre fixtype str '*');
@@ -369,14 +369,14 @@ impl Tree {
                         add_fix!(post fixtype str '*');
                     },
             TreeType::Sub(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '/');
+                        add_fix!(pre fixtype str '-');
                         let l = Self::print_inner(&*tree_type,fixtype);
                         let r = Self::print_inner(&*tree_type1,fixtype);
                         str.push_str(&l);
-                        add_fix!(infix fixtype str '/');
+                        add_fix!(infix fixtype str '-');
                         add_fix!(prepo fixtype str ',');
                         str.push_str(&r);
-                        add_fix!(post fixtype str '/');
+                        add_fix!(post fixtype str '-');
                     },
             TreeType::Brac(tree_type) => {
                         let l = Self::print_inner(&*tree_type,fixtype);
@@ -400,21 +400,17 @@ impl Tree {
     }
 
     pub fn is_number(&self) -> Option<Number>{
-        if let Some(tree) = &self.inner{
-
+        if let Some(tree) = self.inner.as_ref() {
             match &**tree {
-                TreeType::Variable(var) => {
-                    if let Some(var) = self.variables.get(var){
-                        return Some(var.clone());
-                    };
+                TreeType::Variable(name) => {
+                    if let Some(val) = self.variables.get(name) {
+                        return Some(*val); 
+                    }
                 },
-                TreeType::Number(a) => {
-                    return Some(*a);
-                },
+                TreeType::Number(number) => return Some(*number),
                 _ => return None,
             };
-        };
-
+        }
         None
     }
 
@@ -437,10 +433,10 @@ impl Tree {
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 + n2),
                     (l_res, r_res) => {
-                        Err(Box::new(TreeType::Plus(
-                            Self::result_to_node(l_res), 
-                            Self::result_to_node(r_res)
-                        )))
+                        let l_node = Self::result_to_node(l_res);
+                        let r_node = Self::result_to_node(r_res);
+                        
+                        Err(Self::simplify_plus(l_node, r_node))
                     }
                 }
             },
@@ -450,7 +446,12 @@ impl Tree {
                 let r = Self::inner_simplify(right,vars);
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 - n2),
-                    (l_res, r_res) => Err(Box::new(TreeType::Sub(Self::result_to_node(l_res), Self::result_to_node(r_res)))),
+                    (l_res, r_res) => {
+                        let l_node = Self::result_to_node(l_res);
+                        let r_node = Self::result_to_node(r_res);
+                        
+                        Err(Self::simplify_sub(l_node, r_node))
+                    }
                 }
             },
             
@@ -459,7 +460,11 @@ impl Tree {
                 let r = Self::inner_simplify(right,vars);
                 match (l, r) {
                     (Ok(n1), Ok(n2)) => Ok(n1 * n2),
-                    (l_res, r_res) => Err(Box::new(TreeType::Mul(Self::result_to_node(l_res), Self::result_to_node(r_res)))),
+                    (l_res, r_res) => {
+                        let l_node = Self::result_to_node(l_res);
+                        let r_node = Self::result_to_node(r_res);
+                        Err(Self::simplify_mul(l_node, r_node))
+                    }
                 }
             },
             
@@ -479,6 +484,137 @@ impl Tree {
             Ok(num) => Box::new(TreeType::Number(num)),
             Err(node) => node,
         }
+    }
+
+    fn simplify_plus(l: Box<TreeType>, r: Box<TreeType>) -> Box<TreeType> {
+        if let TreeType::Number(n2) = *r {
+            match *l {
+                TreeType::Plus(ll, lr) => {
+                    if let TreeType::Number(n1) = *ll {
+                        return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1 + n2)), lr));
+                    }
+                    if let TreeType::Number(n1) = *lr {
+                        return Box::new(TreeType::Plus(ll, Box::new(TreeType::Number(n1 + n2))));
+                    }
+                    return Box::new(TreeType::Plus(Box::new(TreeType::Plus(ll, lr)), Box::new(TreeType::Number(n2))));
+                },
+                other => return Box::new(TreeType::Plus(Box::new(other), Box::new(TreeType::Number(n2)))),
+            }
+        }
+        
+        if let TreeType::Number(n1) = *l {
+            match *r {
+                TreeType::Plus(rl, rr) => {
+                    if let TreeType::Number(n2) = *rl {
+                        return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1 + n2)), rr));
+                    }
+                    if let TreeType::Number(n2) = *rr {
+                         return Box::new(TreeType::Plus(rl, Box::new(TreeType::Number(n1 + n2))));
+                    }
+                    return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1)), Box::new(TreeType::Plus(rl, rr))));
+                },
+                other => return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1)), Box::new(other))),
+            }
+        }
+
+        Box::new(TreeType::Plus(l, r))
+    }
+
+    fn simplify_sub(l: Box<TreeType>, r: Box<TreeType>) -> Box<TreeType> {
+        // (... - n2)
+        if let TreeType::Number(n2) = *r {
+            match *l {
+                TreeType::Sub(ll, lr) => {
+                     // (n1 - lr) - n2 => (n1 - n2) - lr 
+                     if let TreeType::Number(n1) = *ll {
+                         return Box::new(TreeType::Sub(Box::new(TreeType::Number(n1 - n2)), lr));
+                     }
+                     // (ll - n1) - n2 => ll - (n1 + n2) 
+                     if let TreeType::Number(n1) = *lr {
+                         return Box::new(TreeType::Sub(ll, Box::new(TreeType::Number(n1 + n2))));
+                     }
+                     return Box::new(TreeType::Sub(Box::new(TreeType::Sub(ll, lr)), Box::new(TreeType::Number(n2))));
+                },
+                // (ll + lr) - n2
+                TreeType::Plus(ll, lr) => {
+                    // (n1 + lr) - n2 => (n1 - n2) + lr 
+                    if let TreeType::Number(n1) = *ll {
+                        return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1 - n2)), lr));
+                    }
+                    // (ll + n1) - n2 => ll + (n1 - n2) 
+                    if let TreeType::Number(n1) = *lr {
+                        return Box::new(TreeType::Plus(ll, Box::new(TreeType::Number(n1 - n2))));
+                    }
+                     return Box::new(TreeType::Sub(Box::new(TreeType::Plus(ll, lr)), Box::new(TreeType::Number(n2))));
+                },
+                other => return Box::new(TreeType::Sub(Box::new(other), Box::new(TreeType::Number(n2)))),
+            }
+        }
+        
+        // (n1 - ...)
+        if let TreeType::Number(n1) = *l {
+             match *r.clone() {
+                 // n1 - (rl - rr)
+                 TreeType::Sub(rl, rr) => {
+                     // n1 - (n2 - rr) => (n1 - n2) + rr
+                     if let TreeType::Number(n2) = *rl {
+                         return Box::new(TreeType::Plus(Box::new(TreeType::Number(n1 - n2)), rr));
+                     }
+                     // n1 - (rl - n2) => (n1 + n2) - rl
+                     if let TreeType::Number(n2) = *rr {
+                         return Box::new(TreeType::Sub(Box::new(TreeType::Number(n1 + n2)), rl));
+                     }
+                 },
+                 // n1 - (rl + rr)
+                 TreeType::Plus(rl, rr) => {
+                     // n1 - (n2 + rr) => (n1 - n2) - rr
+                     if let TreeType::Number(n2) = *rl {
+                         return Box::new(TreeType::Sub(Box::new(TreeType::Number(n1 - n2)), rr));
+                     }
+                     // n1 - (rl + n2) => (n1 - n2) - rl
+                     if let TreeType::Number(n2) = *rr {
+                         return Box::new(TreeType::Sub(Box::new(TreeType::Number(n1 - n2)), rl));
+                     }
+                 },
+                 _ => {}
+             }
+        }
+
+        Box::new(TreeType::Sub(l, r))
+    }
+
+    fn simplify_mul(l: Box<TreeType>, r: Box<TreeType>) -> Box<TreeType> {
+        if let TreeType::Number(n2) = *r {
+            match *l {
+                TreeType::Mul(ll, lr) => {
+                    if let TreeType::Number(n1) = *ll {
+                        return Box::new(TreeType::Mul(Box::new(TreeType::Number(n1 * n2)), lr));
+                    }
+                    if let TreeType::Number(n1) = *lr {
+                        return Box::new(TreeType::Mul(ll, Box::new(TreeType::Number(n1 * n2))));
+                    }
+                    return Box::new(TreeType::Mul(Box::new(TreeType::Mul(ll, lr)), Box::new(TreeType::Number(n2))));
+                },
+                other => return Box::new(TreeType::Mul(Box::new(other), Box::new(TreeType::Number(n2)))),
+            }
+        }
+        
+        if let TreeType::Number(n1) = *l {
+            match *r {
+                TreeType::Mul(rl, rr) => {
+                    if let TreeType::Number(n2) = *rl {
+                        return Box::new(TreeType::Mul(Box::new(TreeType::Number(n1 * n2)), rr));
+                    }
+                    if let TreeType::Number(n2) = *rr {
+                         return Box::new(TreeType::Mul(rl, Box::new(TreeType::Number(n1 * n2))));
+                    }
+                    return Box::new(TreeType::Mul(Box::new(TreeType::Number(n1)), Box::new(TreeType::Mul(rl, rr))));
+                },
+                other => return Box::new(TreeType::Mul(Box::new(TreeType::Number(n1)), Box::new(other))),
+            }
+        }
+
+        Box::new(TreeType::Mul(l, r))
     }
 }
 

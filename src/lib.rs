@@ -1,5 +1,4 @@
 pub mod tree;
-pub mod factory;
 pub mod types;
 pub mod util;
 
