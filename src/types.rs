@@ -170,9 +170,8 @@ pub enum TreeType{
 }
 
 #[derive(Debug)]
-pub enum Thing{
-    Variable(String),
-    Number(Number),
-
+pub enum FixType{
+    Infıx,
+    PostFıx,
+    PreFıx,
 }
-

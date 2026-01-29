@@ -14,6 +14,9 @@ struct Args {
     #[arg(long, default_value_t = false)]
     simplify: bool,
 
+    #[arg(long, default_value_t = false)]
+    space: bool,
+
     #[arg(long, value_enum)]
     print: Vec<PrintType>,
 }
@@ -48,7 +51,13 @@ fn main() {
         }
     };
 
-    let mut tree = Tree::new();
+    let mut tree = {
+        if args.space{
+            Tree::new(' ')
+        }else {   
+            Tree::new(',')
+        }
+    };
 
     if let Err(_) = tree.parse_auto(input_str) {
         eprintln!("Hata: İfade ayrıştırılamadı! Sözdizimini kontrol edin.");

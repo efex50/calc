@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{types::{ Number, Symbols, TreeTokens, TreeType}, util::as_i128};
+use crate::{types::{ FixType, Number, Symbols, TreeTokens, TreeType}, util::{as_i128, check_fix_type, split_str}};
 
 macro_rules! add_fix {
     (pre $fixtype:ident $str:ident $t:expr ) => {
@@ -33,24 +33,20 @@ macro_rules! add_fix {
     }
 }
 
-#[derive(Debug)]
-pub enum FixType{
-    Infıx,
-    PostFıx,
-    PreFıx,
-}
 
 #[derive(Debug)]
 pub struct Tree{
     pub inner : Option<Box::<TreeType>>,
     pub variables : HashMap<String,Number>,
+    seperator:char,
 }
 
 // parsing and printing
 impl Tree {
 
-    pub fn new() -> Self{
-        Self { inner: None, variables: HashMap::new() }
+    pub fn new(seperator:impl Into<char>) -> Self{
+        
+        Self { inner: None, variables: HashMap::new(),seperator:seperator.into() }
     }
     pub fn set_var<T: Into<Number>>(&mut self, name: impl Into<String>, val: T) -> Option<Number> {
         self.variables.insert(name.into(), val.into())
@@ -59,33 +55,10 @@ impl Tree {
         self.variables.remove(&name.into())
     }
 
-    fn check_fix_type(str:&String)-> Result<FixType,()>{
-        if str.is_empty(){
-            return Err(());
-        }
-        
-        let symbols = ["+","-","*","/",","];
-        
-        let chars:Vec<String> = split_str(&str, &symbols,&[',',' ']);
-        for x in symbols{
-            if x == chars[0]{
-                return Ok(FixType::PreFıx) ;
-            }
-            if x == chars[chars.len()-1]{
-                return Ok(FixType::PostFıx);
-            }
-        };
-        for x in chars{
-            if symbols.contains(&x.as_str()){
-                return Ok(FixType::Infıx);
-            };
-        }
 
-        Err(())
-    }
-
-    pub fn parse_auto(&mut self,str:String) -> Result<(),()> {
-        let tip = Self::check_fix_type(&str);
+    pub fn parse_auto(&mut self,str:impl Into<String>) -> Result<(),()> {
+        let str = str.into();
+        let tip = check_fix_type(&str);
         if let Ok(tip)=tip{
             Self::parse_str(self,str, tip)?;
         }else {
@@ -303,7 +276,7 @@ impl Tree {
     pub fn prefixprint(&self) -> Result<String,()>{
         let str: String ;
         if let Some(inner) = &self.inner{
-            str = Self::print_inner(&*inner,&FixType::PreFıx)
+            str = Self::print_inner(&*inner,&FixType::PreFıx,self.seperator)
         }else {
             return Err(());
         }
@@ -312,7 +285,7 @@ impl Tree {
     pub fn postfixprint(&self) -> Result<String,()>{
         let str: String ;
         if let Some(inner) = &self.inner{
-            str = Self::print_inner(&*inner,&FixType::PostFıx)
+            str = Self::print_inner(&*inner,&FixType::PostFıx,self.seperator)
         }else {
             return Err(());
         }
@@ -321,67 +294,107 @@ impl Tree {
     pub fn infixprint(&self) -> Result<String,()>{
         let str: String ;
         if let Some(inner) = &self.inner{
-            str = Self::print_inner(&*inner,&FixType::Infıx)
+            str = Self::print_inner(&*inner,&FixType::Infıx,self.seperator)
         }else {
             return Err(());
         }
         Ok(str)
     }
 
-    fn print_inner(tree:&TreeType,fixtype:&FixType) -> String{
+    fn print_inner(tree:&TreeType,fixtype:&FixType,seperator:char) -> String{
         let mut str = String::new();
 
         match tree {
             TreeType::Variable(name) => { 
-                        str = format!("{}{}",str,name)
-                    },
+                str = format!("{}{}",str,name)
+            },
             TreeType::Number(number) => {
-                        str = format!("{str}{}",number.as_str())
-                    },
-            TreeType::Plus(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '+');
-                        let l = Self::print_inner(&*tree_type,fixtype);
-                        let r = Self::print_inner(&*tree_type1,fixtype);
-                        str.push_str(&l);
-                        add_fix!(infix fixtype str '+');
-                        add_fix!(prepo fixtype str ',');
-                        str.push_str(&r);
-                        add_fix!(post fixtype str '+');
-                    },
-            TreeType::Div(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '/');
-                        let l = Self::print_inner(&*tree_type,fixtype);
-                        let r = Self::print_inner(&*tree_type1,fixtype);
-                        str.push_str(&l);
-                        add_fix!(infix fixtype str '/');
-                        add_fix!(prepo fixtype str ',');
-                        str.push_str(&r);
-                        add_fix!(post fixtype str '/');
-                    },
-            TreeType::Mul(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '*');
-                        let l = Self::print_inner(&*tree_type,fixtype);
-                        let r = Self::print_inner(&*tree_type1,fixtype);
-                        str.push_str(&l);
-                        add_fix!(infix fixtype str '*');
-                        add_fix!(prepo fixtype str ',');
-                        str.push_str(&r);
-                        add_fix!(post fixtype str '*');
-                    },
-            TreeType::Sub(tree_type, tree_type1) => {
-                        add_fix!(pre fixtype str '-');
-                        let l = Self::print_inner(&*tree_type,fixtype);
-                        let r = Self::print_inner(&*tree_type1,fixtype);
-                        str.push_str(&l);
-                        add_fix!(infix fixtype str '-');
-                        add_fix!(prepo fixtype str ',');
-                        str.push_str(&r);
-                        add_fix!(post fixtype str '-');
-                    },
-            TreeType::Brac(tree_type) => {
-                        let l = Self::print_inner(&*tree_type,fixtype);
-                        str.push_str(&l);
-                    },
+                str = format!("{str}{}",number.as_str())
+            },
+            TreeType::Plus(left, right) => {
+                add_fix!(pre fixtype str '+');
+                let l = Self::print_inner(left,fixtype,seperator);
+                let r = Self::print_inner(right,fixtype,seperator);
+                str.push_str(&l);
+                add_fix!(infix fixtype str '+');
+                add_fix!(prepo fixtype str seperator );
+                str.push_str(&r);
+                add_fix!(post fixtype str '+');
+            },
+            TreeType::Sub(left, right) => {
+                add_fix!(pre fixtype str '-');
+                let l = Self::print_inner(left,fixtype,seperator);
+                
+                let r_raw = Self::print_inner(right, fixtype, seperator);
+                let r = if let FixType::Infıx = fixtype{
+                    match **right {
+                    TreeType::Plus(_, _) | TreeType::Sub(_, _) => format!("({})", r_raw),
+                    _ => r_raw
+                }
+                }else {
+                    r_raw
+                };
+                str.push_str(&l);
+                add_fix!(infix fixtype str '-');
+                add_fix!(prepo fixtype str seperator);
+                str.push_str(&r);
+                add_fix!(post fixtype str '-');
+            },
+            TreeType::Mul(left, right) => {
+                add_fix!(pre fixtype str '*');
+
+                let l_raw = Self::print_inner(left, fixtype,seperator);
+                let r_raw = Self::print_inner(right, fixtype,seperator);
+                // parantez
+                let (l,r) = if let FixType::Infıx = fixtype{
+                    let l_new = match **left {
+                        TreeType::Plus(_, _) | TreeType::Sub(_, _) => format!("({})", l_raw),
+                        _ => l_raw
+                    };
+                    let r_new = match **right {
+                        TreeType::Plus(_, _) | TreeType::Sub(_, _) => format!("({})", r_raw),
+                        _ => r_raw
+                    };
+                    (l_new,r_new)
+                }else {
+                    (l_raw,r_raw)
+                };
+
+                str.push_str(&l);
+                add_fix!(infix fixtype str '*');
+                add_fix!(prepo fixtype str seperator);
+                str.push_str(&r);
+                add_fix!(post fixtype str '*');
+            },
+            TreeType::Div(left, right) => {
+                add_fix!(pre fixtype str '/');
+                let l_raw = Self::print_inner(left, fixtype,seperator);
+                let r_raw = Self::print_inner(right, fixtype,seperator);
+
+                let (l, r) = if let FixType::Infıx = fixtype {
+                    let l_new = match **left {
+                        TreeType::Plus(_, _) | TreeType::Sub(_, _) => format!("({})", l_raw),
+                        _ => l_raw
+                    };
+                    let r_new = match **right {
+                        TreeType::Plus(_, _) | TreeType::Sub(_, _) | TreeType::Mul(_, _) | TreeType::Div(_, _) => format!("({})", r_raw),
+                        _ => r_raw
+                    };
+                    (l_new, r_new)
+                } else {
+                    (l_raw, r_raw)
+                };                str.push_str(&l);
+                add_fix!(infix fixtype str '/');
+                add_fix!(prepo fixtype str seperator);
+                str.push_str(&r);
+                add_fix!(post fixtype str '/');
+            },
+            TreeType::Brac(left) => {
+                add_fix!(infix fixtype str '(');
+                let l = Self::print_inner(left,fixtype,seperator);
+                str.push_str(&l);
+                add_fix!(infix fixtype str ')');
+            },
         }
         return str;
     }
@@ -626,79 +639,10 @@ fn get_binding_power(op: &TreeTokens) -> Option<(u8, u8)> {
     }
 }
 
-pub fn split_str(str: &str, split_symbols: &[&str], discard_symbols: &[char]) -> Vec<String> {
-    let mut tokens: Vec<String> = Vec::new();
-    let mut current_token = String::new();
-    
-    let chars: Vec<char> = str.chars().collect();
-    let mut i = 0;
-
-    'main: while i < chars.len() {
-        let mut matched_symbol: Option<&str> = None;
-
-        for &sym in split_symbols {
-            if i + sym.len() <= chars.len() {
-                let slice = &chars[i..i+sym.len()];
-                let slice_str: String = slice.iter().collect();
-                
-                if slice_str == sym {
-                    match matched_symbol {
-                        Some(current_match) => {
-                            if sym.len() > current_match.len() {
-                                matched_symbol = Some(sym);
-                            }
-                        },
-                        None => matched_symbol = Some(sym),
-                    }
-                }
-            }
-        }
-
-        if let Some(symbol) = matched_symbol {
-            if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
-            }
-
-            let should_discard = if symbol.chars().count() == 1 {
-                let c = symbol.chars().next().unwrap();
-                discard_symbols.contains(&c)
-            } else {
-                false 
-            };
-
-            if !should_discard {
-                tokens.push(symbol.to_string());
-            }
-
-            i += symbol.chars().count();
-            continue 'main;
-        }
-
-        let current_char = chars[i];
-        if discard_symbols.contains(&current_char) {
-            if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
-            }
-            i += 1;
-            continue 'main;
-        }
-
-        current_token.push(current_char);
-        i += 1;
-    }
-
-    if !current_token.is_empty() {
-        tokens.push(current_token);
-    }
-
-    tokens
-}
-
 #[cfg(test)]
 pub mod test{
-    use crate::tree::split_str;
+    use crate::util::split_str;
+
 
     #[test]
     fn split_test(){
@@ -708,6 +652,9 @@ pub mod test{
         let res = split_str(&str.to_string(), &["+","-","*","/","*/*"],&[]);
         assert_eq!(expected,res);
     }
+
+   
+
     #[test]
     fn sdadt(){
         let str = "+5 5";
